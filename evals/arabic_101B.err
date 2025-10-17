@@ -1,0 +1,28 @@
+Generating test split:   0%|          | 0/14455 [00:00<?, ? examples/s]Generating test split:  69%|██████▉   | 10000/14455 [00:00<00:00, 72999.52 examples/s]Generating test split: 100%|██████████| 14455/14455 [00:00<00:00, 65034.91 examples/s]
+Generating dev split:   0%|          | 0/120 [00:00<?, ? examples/s]Generating dev split: 100%|██████████| 120/120 [00:00<00:00, 13493.38 examples/s]
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "/c1/apps/python3/3.13.3/lib/python3.13/multiprocessing/pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+                    ~~~~^^^^^^^^^^^^^^^
+  File "/c1/apps/python3/3.13.3/lib/python3.13/multiprocessing/pool.py", line 48, in mapstar
+    return list(map(*args))
+  File "/gpfs/automountdir/gpfs/homes/SEAS/home/g21775526/code/aladdin/evals/ar_llmu.py", line 34, in tokenize
+    tokens.extend(enc.encode_ordinary(doc["text"]))
+                                      ~~~^^^^^^^^
+TypeError: string indices must be integers, not 'str'
+"""
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/gpfs/automountdir/gpfs/homes/SEAS/home/g21775526/code/aladdin/evals/ar_llmu.py", line 51, in <module>
+    for tokens in pool.imap(tokenize, ds, chunksize=16):
+                  ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/c1/apps/python3/3.13.3/lib/python3.13/multiprocessing/pool.py", line 423, in <genexpr>
+    return (item for chunk in result for item in chunk)
+                              ^^^^^^
+  File "/c1/apps/python3/3.13.3/lib/python3.13/multiprocessing/pool.py", line 873, in next
+    raise value
+TypeError: string indices must be integers, not 'str'
