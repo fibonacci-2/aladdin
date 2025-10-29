@@ -10,12 +10,12 @@ Will save shards to the local directory "arabic_101B".
 import os
 import multiprocessing as mp
 import numpy as np
-import tiktoken
+from transformers import AutoTokenizer
 from datasets import load_dataset # pip install datasets
 from tqdm import tqdm # pip install tqdm
 
 # ------------------------------------------
-local_dir = "/content/drive/MyDrive/aladdin/arabic_101B"
+local_dir = "data/arabic_101B"
 shard_size = int(1e8) # 100M tokens per shard
 
 # create the cache the local directory if it doesn't exist yet
@@ -25,14 +25,27 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 # download the dataset
 ds = load_dataset("ClusterlabAi/101_billion_arabic_words_dataset", split="train")
 
-# init the tokenizer
-enc = tiktoken.get_encoding("gpt2")
-eot = enc._special_tokens['<|endoftext|>'] # end of text token
+# init the tokenizer - using Aranizer instead of tiktoken
+tokenizer = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-86k")
+
 def tokenize(doc):
     # tokenizes a single document and returns a numpy array of uint16 tokens
-    tokens = [eot] # the special <|endoftext|> token delimits all documents
-    tokens.extend(enc.encode_ordinary(doc["text"]))
-    tokens_np = np.array(tokens)
+    # Use the Aranizer tokenizer to tokenize the text
+    tokens = tokenizer.tokenize(doc["text"])
+    
+    # Convert tokens to token IDs
+    token_ids = tokenizer.convert_tokens_to_ids(tokens)
+    
+    # Add the special token at the beginning (using the tokenizer's EOS token as delimiter)
+    # Note: You might want to use a different special token depending on the tokenizer's setup
+    eos_token_id = tokenizer.eos_token_id if tokenizer.eos_token_id is not None else tokenizer.sep_token_id
+    if eos_token_id is None:
+        # If no EOS token is defined, we'll just use 0 as delimiter (not ideal but works)
+        eos_token_id = 0
+    
+    tokens_with_special = [eos_token_id] + token_ids
+    tokens_np = np.array(tokens_with_special)
+    
     assert (0 <= tokens_np).all() and (tokens_np < 2**16).all(), "token dictionary too large for uint16"
     tokens_np_uint16 = tokens_np.astype(np.uint16)
     return tokens_np_uint16

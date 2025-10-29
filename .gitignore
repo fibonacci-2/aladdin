@@ -6,3 +6,8 @@ venv
 venv_
 venv99
 venv99/
+
+
+*.npy
+*.csv
+*.pt
