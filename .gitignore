@@ -6,8 +6,9 @@ venv
 venv_
 venv99
 venv99/
-
-
+__pycache__/
+*.ipynb_checkpoints/
 *.npy
 *.csv
 *.pt
+

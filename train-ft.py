@@ -18,20 +18,23 @@ from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import numpy as np
-from hellaswag import render_example, iterate_examples
-from arabic_LLMU import render_example_arabic_mmlu, iterate_examples_arabic_mmlu
-enc = tiktoken.get_encoding('gpt2')
+from evals.hellaswag import render_example, iterate_examples
+from evals.arabic_LLMU import render_example_arabic_mmlu, iterate_examples_arabic_mmlu
 
-total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
-B = 64 # micro batch size
+enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
+
+total_batch_size = 8388608 # 2**19, ~0.5M, in number of tokens
+B = 4 # micro batch size
 T = 512 # sequence length
 max_steps = 19073 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
+data_root = "data/Arabic-Tweets"
+eval_frequency = 5
 
 @dataclass
 class FreeTransformerConfig:
     block_size: int = 1024
-    vocab_size: int = 50257
+    vocab_size: int = 64000  # Updated to match Aranizer-PBE-64k vocab size
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
@@ -272,7 +275,6 @@ class DataLoaderLite:
         assert split in {'train', 'val'}
 
         # get the shard filenames
-        data_root = "edu_fineweb10B"
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
         shards = sorted(shards)
@@ -411,7 +413,7 @@ for step in range(max_steps):
     last_step = (step == max_steps - 1)
 
     # once in a while evaluate our validation loss
-    if step % 100 == 0 or last_step:
+    if step % eval_frequency == 0 or last_step:
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -444,7 +446,7 @@ for step in range(max_steps):
                 torch.save(checkpoint, checkpoint_path)
 
     # once in a while evaluate hellaswag
-    if (step % 100 == 0 or last_step) and (not use_compile):
+    if (step % eval_frequency == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
         for i, example in enumerate(iterate_examples("val")):
@@ -477,11 +479,11 @@ for step in range(max_steps):
                 f.write(f"{step} hella {acc_norm:.4f}\n")
 
     # once in a while generate from the model (except step 0, which is noise)
-    if ((step > 0 and step % 100 == 0) or last_step) and (not use_compile):
+    if ((step > 0 and step % eval_frequency == 0) or last_step) and (not use_compile):
         model.eval()
         num_return_sequences = 4
         max_length = 32
-        tokens = enc.encode("Hello, I'm a language model,")
+        tokens = enc.encode_plus("Hello, I'm a language model,")
         tokens = torch.tensor(tokens, dtype=torch.long)
         tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
         xgen = tokens.to(device)
