@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 import inspect
 import os
+import argparse
 
 import torch
 import torch.nn as nn
@@ -21,6 +22,13 @@ import numpy as np
 from evals.hellaswag import render_example, iterate_examples
 from evals.evaluate_arabicMMLU import render_example_arabic_mmlu, iterate_examples_arabic_mmlu
 
+# Add argument parser
+parser = argparse.ArgumentParser(description='Train FreeTransformer')
+parser.add_argument('--output_dir', type=str, default='outputs', help='Output directory')
+parser.add_argument('--dataset', type=str, default='arabic_101B', help='Output directory')
+
+args = parser.parse_args()
+
 enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 
 total_batch_size = 524288 
@@ -28,7 +36,7 @@ B = 128 # micro batch size
 T = 512 # sequence length
 max_steps = 11444  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
-data_root = "data/arabic_101B"
+data_root = f"data/{args.dataset}"
 eval_frequency = 500
 
 import torch
@@ -425,7 +433,7 @@ def get_lr(it):
 optimizer = raw_model.configure_optimizers(weight_decay=0.1, learning_rate=6e-4, device_type='cuda')
 
 # create the log directory we will write checkpoints to and log to
-log_dir = "log"
+log_dir = f"{args.output_dir}/log"
 device_type = 'cuda'
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, f"log.txt")
@@ -458,7 +466,7 @@ for step in range(max_steps):
                 f.write(f"{step} val {val_loss_accum.item():.4f}\n")
             if step > 0 and (step % 5000 == 0 or last_step):
                 # optionally write model checkpoints
-                checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
+                checkpoint_path = os.path.join(log_dir, f"model_{step:05d}_steps_{val_loss_accum.item():.4f}_loss.pt")
                 checkpoint = {
                     'model': raw_model.state_dict(),
                     'config': raw_model.config,
