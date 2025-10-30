@@ -16,7 +16,7 @@ module load python3
 cd "$SLURM_SUBMIT_DIR"
 
 # Create output directory with timestamp
-OUTPUT_DIR="outputs/run_${SLURM_JOB_ID}"
+OUTPUT_DIR="outputs/2.2_$(date +'%Y%m%d_%H%M%S')"
 mkdir -p "$OUTPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Job ID: $SLURM_JOB_ID"

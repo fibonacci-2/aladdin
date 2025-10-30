@@ -11,4 +11,6 @@ __pycache__/
 *.npy
 *.csv
 *.pt
-
+.err
+.out
+outputs/
