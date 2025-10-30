@@ -6,7 +6,7 @@ from transformers import GPT2LMHeadModel
 import pandas as pd
 
 # Assume DATA_CACHE_DIR is defined elsewhere
-DATA_CACHE_DIR = "./data"
+DATA_CACHE_DIR = "./data/evals/"
 
 enc = tiktoken.get_encoding("gpt2")
 
@@ -82,7 +82,7 @@ def iterate_examples_arabic_mmlu(split):
     Iterate through ArabicMMLU examples for the given split
     """
     # Assuming the data is available as CSV files
-    csv_path = os.path.join(DATA_CACHE_DIR, f"arabic_mmlu_{split}.csv")
+    csv_path = os.path.join(DATA_CACHE_DIR, f"ArabicMMLU_{split}.csv")
     df = pd.read_csv(csv_path)
     
     for _, row in df.iterrows():

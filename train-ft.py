@@ -19,7 +19,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import numpy as np
 from evals.hellaswag import render_example, iterate_examples
-from evals.arabic_LLMU import render_example_arabic_mmlu, iterate_examples_arabic_mmlu
+from evals.evaluate_arabicMMLU import render_example_arabic_mmlu, iterate_examples_arabic_mmlu
 
 enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 
@@ -29,7 +29,7 @@ T = 512 # sequence length
 max_steps = 19073 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
 data_root = "data/Arabic-Tweets"
-eval_frequency = 5
+eval_frequency = 1
 
 import torch
 import torch.nn as nn
@@ -39,7 +39,7 @@ from dataclasses import dataclass
 
 @dataclass
 class FreeTransformerConfig:
-    block_size: int = 1024
+    block_size: int = 512
     vocab_size: int = 64000
     n_layer: int = 12
     n_head: int = 12
@@ -473,6 +473,10 @@ for step in range(max_steps):
                 continue
             # render the example into tokens and labels
             _, tokens, mask, label = render_example(example)
+                        # Truncate to block size if needed
+            if tokens.size(1) > T:
+                tokens = tokens[:, :T]
+                mask = mask[:, :T]
             tokens = tokens.to(device)
             mask = mask.to(device)
             # get the logits
@@ -496,12 +500,44 @@ for step in range(max_steps):
             with open(log_file, "a") as f:
                 f.write(f"{step} hella {acc_norm:.4f}\n")
 
+    # once in a while evaluate arabic mmlu
+    if (step % eval_frequency == 0 or last_step) and (not use_compile):
+        num_correct_norm_arabic = 0
+        num_total_arabic = 0
+        for i, example in enumerate(iterate_examples_arabic_mmlu("val")):
+            if i % ddp_world_size != ddp_rank:
+                continue
+            _, tokens, mask, label = render_example_arabic_mmlu(example)
+                        # Truncate to block size if needed
+            if tokens.size(1) > T:
+                tokens = tokens[:, :T]
+                mask = mask[:, :T]
+            tokens = tokens.to(device)
+            mask = mask.to(device)
+            with torch.no_grad():
+                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+                    logits, loss = model(tokens)
+                pred_norm = get_most_likely_row(tokens, mask, logits)
+            num_total_arabic += 1
+            num_correct_norm_arabic += int(pred_norm == label)
+        if ddp:
+            num_total_arabic = torch.tensor(num_total_arabic, dtype=torch.long, device=device)
+            num_correct_norm_arabic = torch.tensor(num_correct_norm_arabic, dtype=torch.long, device=device)
+            dist.all_reduce(num_total_arabic, op=dist.ReduceOp.SUM)
+            dist.all_reduce(num_correct_norm_arabic, op=dist.ReduceOp.SUM)
+            num_total_arabic = num_total_arabic.item()
+            num_correct_norm_arabic = num_correct_norm_arabic.item()
+        acc_norm_arabic = num_correct_norm_arabic / num_total_arabic
+        if master_process:
+            print(f"Arabic MMLU accuracy: {num_correct_norm_arabic}/{num_total_arabic}={acc_norm_arabic:.4f}")
+            with open(log_file, "a") as f:
+                f.write(f"{step} arabic_mmlu {acc_norm_arabic:.4f}\n")
     # once in a while generate from the model (except step 0, which is noise)
     if ((step > 0 and step % eval_frequency == 0) or last_step) and (not use_compile):
         model.eval()
         num_return_sequences = 4
         max_length = 32
-        tokens = enc.encode_plus("Hello, I'm a language model,")
+        tokens = enc.encode("Hello, I'm a language model,")
         tokens = torch.tensor(tokens, dtype=torch.long)
         tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
         xgen = tokens.to(device)
