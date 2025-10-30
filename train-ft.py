@@ -23,10 +23,10 @@ from evals.evaluate_arabicMMLU import render_example_arabic_mmlu, iterate_exampl
 
 enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 
-total_batch_size = 8388608 # 2**19, ~0.5M, in number of tokens
-B = 4 # micro batch size
+total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
+B = 64 # micro batch size
 T = 512 # sequence length
-max_steps = 19073 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+max_steps = 11253 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
 data_root = "data/Arabic-Tweets"
 eval_frequency = 1
@@ -537,7 +537,7 @@ for step in range(max_steps):
         model.eval()
         num_return_sequences = 4
         max_length = 32
-        tokens = enc.encode("Hello, I'm a language model,")
+        tokens = enc.encode("انا هنا")
         tokens = torch.tensor(tokens, dtype=torch.long)
         tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
         xgen = tokens.to(device)

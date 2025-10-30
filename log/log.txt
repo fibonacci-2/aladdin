@@ -1,9 +1,6 @@
-0 val 11.2392
-0 hella 0.2529
-0 arabic_mmlu 0.0197
-0 train 11.233031
-1 val 11.2289
-1 hella 0.2531
-1 arabic_mmlu 0.0188
-1 train 11.213184
-2 val 11.2088
+26 hella 0.2540
+26 arabic_mmlu 0.0348
+26 train 10.284567
+27 val 10.5721
+23 train 10.511867
+24 val 10.4694
