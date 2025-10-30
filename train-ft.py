@@ -31,10 +31,16 @@ max_steps = 19073 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch si
 data_root = "data/Arabic-Tweets"
 eval_frequency = 5
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+from dataclasses import dataclass
+
 @dataclass
 class FreeTransformerConfig:
     block_size: int = 1024
-    vocab_size: int = 64000  # Updated to match Aranizer-PBE-64k vocab size
+    vocab_size: int = 64000
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
@@ -161,13 +167,19 @@ class BinaryMapper(nn.Module):
         self.output_dim = 2 ** H
         
     def forward(self, logits=None, training=True):
-        if training:
+        if training and logits is not None:
             B, T, H = logits.shape
             probs = torch.sigmoid(logits)
             bits = torch.bernoulli(probs)
         else:
-            B, T = 1, 1  # Will be expanded later
-            bits = torch.randint(0, 2, (B, T, self.H), device=logits.device if logits is not None else 'cpu', dtype=torch.float)
+            # For generation or when logits is None, use uniform sampling
+            if logits is not None:
+                B, T = logits.shape[0], logits.shape[1]
+                device = logits.device
+            else:
+                B, T = 1, 1
+                device = next(self.parameters()).device if self.parameters() else 'cpu'
+            bits = torch.randint(0, 2, (B, T, self.H), device=device, dtype=torch.float)
         
         powers = 2 ** torch.arange(self.H, device=bits.device)
         indices = (bits * powers.view(1, 1, -1)).sum(dim=-1).long()
@@ -206,7 +218,7 @@ class FreeTransformer(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None, training=True):
+    def forward(self, idx, targets=None):
         B, T = idx.size()
         assert T <= self.config.block_size, f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}"
         
@@ -216,24 +228,30 @@ class FreeTransformer(nn.Module):
         x = tok_emb + pos_emb
 
         L = self.config.n_layer
+        
+        # First L/2 blocks - causal
         for block in self.transformer.h[:L//2]:
             x = block(x)
         x_L_half = x
 
-        if training:
-            y = self.encoder_block(x_L_half)
-            y_normalized = F.rms_norm(y, y.shape[-1:])
-            o = self.encoder_linear_readout(y_normalized)
+        # Free Transformer stochastic bridge - ALWAYS USED IN TRAINING
+        # This ensures all parameters receive gradients
+        y = self.encoder_block(x_L_half)
+        y_normalized = F.rms_norm(y, y.shape[-1:])
+        o = self.encoder_linear_readout(y_normalized)
+        
+        # During training: use learned sampling, during eval: use uniform
+        if self.training:
             z = self.binary_mapper(o, training=True)
         else:
-            if x_L_half is not None:
-                B, T = x_L_half.shape[0], x_L_half.shape[1]
-            z = self.binary_mapper(training=False)
-            z = z.expand(B, T, -1).to(x_L_half.device)
+            z = self.binary_mapper(o, training=False)
         
         r = self.linear_post_sampler(z)
+        
+        # Middle block with noise injection
         x = self.transformer.h[L//2](x_L_half + r)
 
+        # Remaining blocks - causal
         for block in self.transformer.h[L//2 + 1:]:
             x = block(x)
 
@@ -256,7 +274,6 @@ class FreeTransformer(nn.Module):
         ]
         optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8)
         return optimizer
-
 
 
 
@@ -338,6 +355,7 @@ if ddp:
     ddp_rank = int(os.environ['RANK'])
     ddp_local_rank = int(os.environ['LOCAL_RANK'])
     ddp_world_size = int(os.environ['WORLD_SIZE'])
+    print("DDP: rank %d, local_rank %d, world_size %d" % (ddp_rank, ddp_local_rank, ddp_world_size))
     device = f'cuda:{ddp_local_rank}'
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
@@ -375,7 +393,7 @@ model = FreeTransformer(FreeTransformerConfig())
 model.to(device)
 # model = torch.compile(model)
 if ddp:
-    model = DDP(model, device_ids=[ddp_local_rank])
+    model = DDP(model, device_ids=[ddp_local_rank], find_unused_parameters=True)
 use_compile = False # torch.compile interferes with HellaSwag eval and Generation. TODO fix
 if use_compile:
     model = torch.compile(model)
