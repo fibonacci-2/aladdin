@@ -23,13 +23,13 @@ from evals.evaluate_arabicMMLU import render_example_arabic_mmlu, iterate_exampl
 
 enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 
-total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
-B = 64 # micro batch size
+total_batch_size = 524288 
+B = 128 # micro batch size
 T = 512 # sequence length
-max_steps = 11253 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+max_steps = 35482  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
 data_root = "data/Arabic-Tweets"
-eval_frequency = 1
+eval_frequency = 100
 
 import torch
 import torch.nn as nn
@@ -229,9 +229,11 @@ class FreeTransformer(nn.Module):
 
         L = self.config.n_layer
         
-        # First L/2 blocks - causal
+        # First L/2 blocks - causal with gradient checkpointing
         for block in self.transformer.h[:L//2]:
-            x = block(x)
+            x = torch.utils.checkpoint.checkpoint(
+                block, x, use_reentrant=False
+            )
         x_L_half = x
 
         # Free Transformer stochastic bridge - ALWAYS USED IN TRAINING
@@ -248,12 +250,16 @@ class FreeTransformer(nn.Module):
         
         r = self.linear_post_sampler(z)
         
-        # Middle block with noise injection
-        x = self.transformer.h[L//2](x_L_half + r)
+        # Middle block with noise injection and gradient checkpointing
+        x = torch.utils.checkpoint.checkpoint(
+            self.transformer.h[L//2], x_L_half + r, use_reentrant=False
+        )
 
-        # Remaining blocks - causal
+        # Remaining blocks - causal with gradient checkpointing
         for block in self.transformer.h[L//2 + 1:]:
-            x = block(x)
+            x = torch.utils.checkpoint.checkpoint(
+                block, x, use_reentrant=False
+            )
 
         x = self.transformer.ln_f(x)
         logits = self.lm_head(x)

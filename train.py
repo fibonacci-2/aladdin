@@ -16,6 +16,8 @@ B = 128 # micro batch size
 T = 512 # sequence length
 max_steps = 35482  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
+data_root = "data/Arabic-Tweets"
+
 class CausalSelfAttention(nn.Module):
 
     def __init__(self, config):
@@ -227,7 +229,6 @@ class DataLoaderLite:
         assert split in {'train', 'val'}
 
         # get the shard filenames
-        data_root = "arabic_101B"
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
         shards = sorted(shards)
