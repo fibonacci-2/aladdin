@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=tr-2.1
-#SBATCH --output=train_2.1.out
-#SBATCH --error=train_2.1.err
+#SBATCH --job-name=tr-2.3
+#SBATCH --output=train_2.3.out
+#SBATCH --error=train_2.3.err
 #SBATCH --time=168:00:00
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -16,7 +16,7 @@ module load python3
 cd "$SLURM_SUBMIT_DIR"
 
 # Create output directory with timestamp
-OUTPUT_DIR="outputs/2.1_$(date +'%Y%m%d_%H%M%S')"
+OUTPUT_DIR="outputs/2.3_$(date +'%Y%m%d_%H%M%S')"
 mkdir -p "$OUTPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Job ID: $SLURM_JOB_ID"
@@ -33,7 +33,7 @@ module load python3
 
 torchrun --standalone  train-ft.py \
     --output_dir "$OUTPUT_DIR" \
-    --dataset "Arabic-Tweets" \
+    --dataset "combined_119" \
     > "$OUTPUT_DIR/py-output.txt" 2>&1
 
 

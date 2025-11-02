@@ -5,9 +5,6 @@ README
 113G	data/arabic_101B
 30B
 
-##arbml/DART
-3.0M	data/dart_arabic
-
 ##pain/Arabic-Tweets
 23G	data/Arabic-Tweets
 6B tokens
