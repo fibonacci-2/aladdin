@@ -12,7 +12,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 # ------------------------------------------
-local_dir = "data/arbml-dart"
+local_dir = "data/fineweb2-msa"
 shard_size = int(1e8) # 100M tokens per shard
 
 # create the cache the local directory if it doesn't exist yet
@@ -24,7 +24,7 @@ print(f"Data will be saved to: {DATA_CACHE_DIR}")
 # download the dataset
 print("Loading dataset...")
 # ds = load_dataset("ClusterlabAi/101_billion_arabic_words_dataset", split="train")
-ds = load_dataset("arbml/DART", split="train")  # for testing
+ds = load_dataset("Omartificial-Intelligence-Space/Fineweb2-MSA", split="train")  # for testing
 # init the tokenizer - using Aranizer instead of tiktoken
 print("Loading tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
@@ -35,7 +35,7 @@ def tokenize(doc):
     # tokenizes a single document and returns a numpy array of uint32 tokens
     # Use encode_plus for better handling of special tokens
     encoded = tokenizer.encode_plus(
-        doc["tweet_text"],
+        doc["text"],
         add_special_tokens=True,
         return_attention_mask=False,
         return_tensors=None
@@ -90,3 +90,4 @@ with mp.Pool(nprocs) as pool:
         write_datafile(filename, all_tokens_np[:token_count])
 
 print("Tokenization completed!")
+

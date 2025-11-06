@@ -34,7 +34,7 @@ enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 total_batch_size = 524288 
 B = 128 # micro batch size
 T = 512 # sequence length
-max_steps = 11444  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+max_steps = 77056  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
 data_root = f"data/{args.dataset}"
 eval_frequency = 500
