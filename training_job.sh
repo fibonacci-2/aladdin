@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH --job-name=tr-2.5
-#SBATCH --output=train_2.5_%j.out
-#SBATCH --error=train_2.5_%j.err
+#SBATCH --job-name=tr-2.6.3
+#SBATCH --output=train_2.6.3_%j.out
+#SBATCH --error=train_2.6.3_%j.err
 #SBATCH --time=168:00:00
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -16,7 +16,7 @@ module load python3
 cd "$SLURM_SUBMIT_DIR"
 
 # Create output directory with timestamp
-OUTPUT_DIR="outputs/2.5_$(date +'%Y%m%d_%H%M%S')"
+OUTPUT_DIR="outputs/2.6.3_$(date +'%Y%m%d_%H%M%S')"
 mkdir -p "$OUTPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Job ID: $SLURM_JOB_ID"
@@ -31,7 +31,7 @@ cp "$0" "$OUTPUT_DIR/training_job.sh"
 source /SEAS/home/g21775526/torch-py_3.9-aarm64/bin/activate
 module load python3
 
-torchrun --standalone  train-ft.py \
+torchrun --standalone  alladin-medium.py \
     --output_dir "$OUTPUT_DIR" \
     --dataset "data/fineweb2-msa" \
     > "$OUTPUT_DIR/py-output.txt" 2>&1

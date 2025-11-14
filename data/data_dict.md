@@ -40,7 +40,41 @@ got intereputed first run 2.3.1 and gave a decent model after 7k steps: model_05
 2.3 with data/combined_601
 
 ## 2.5:
-fieweb2-msa
+fieweb2-msa //giving .29 mmlu at 5000 steps, compared to .25 with 101B at same steps!! 101B data is trash compared to this. confirmed by prompting the model on a qa example. even though it achieved higher val loss at this step (2.8).
+
+## 2.6:
+    fineweb2 
+    
+    block_size: int = 512
+    vocab_size: int = 64000
+    n_layer: int = 22          # 22 layers (as in 1.98B model)
+    n_head: int = 64           # 64 attention heads (as in 1.98B model)
+    n_embd: int = 3072  
+    H: int = 8
+    attn_pdrop: float = 0.1
+    resid_pdrop: float = 0.1
+
+## 2.6.2
+2.6 with proper medium model dimentions as per gpt2 medium config: as opposed to mhGPT random shit.
+    block_size: int = 512
+    vocab_size: int = 64000
+    n_layer: int = 24          
+    n_head: int = 16           
+    n_embd: int = 1024  
+    H: int = 8
+    attn_pdrop: float = 0.1
+    resid_pdrop: float = 0.1
+
+## 2.6.3
+large flavor as per gpt2 configs
+     block_size: int = 512
+    vocab_size: int = 64000
+    n_layer: int = 36          
+    n_head: int = 20           
+    n_embd: int = 1280  
+    H: int = 8
+    attn_pdrop: float = 0.1
+    resid_pdrop: float = 0.1
 
 # finetuning
 depression:
