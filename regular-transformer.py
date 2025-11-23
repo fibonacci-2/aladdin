@@ -5,18 +5,49 @@ import inspect
 from dataclasses import dataclass
 import pandas as pd
 import torch
+import argparse
+from transformers import AutoTokenizer
+
 import torch.nn as nn
 from torch.nn import functional as F
-from hellaswag import render_example, iterate_examples
-from arabic_LLMU import render_example_arabic_mmlu, iterate_examples_arabic_mmlu
-# -----------------------------------------------------------------------------
-# total dataset size: 1.86e10 tokens
-total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
-B = 128 # micro batch size
-T = 512 # sequence length
-max_steps = 35482  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
-data_root = "data/Arabic-Tweets"
+parser = argparse.ArgumentParser(description='Train FreeTransformer')
+parser.add_argument('--output_dir', type=str, default='outputs', help='Output directory')
+parser.add_argument('--dataset', type=str, default='arabic_101B', help='Output directory')
+
+args = parser.parse_args()
+
+# -----------------------------------------------------------------------------
+total_batch_size = 245760 
+B = 8 # micro batch size
+T = 512 # sequence length
+max_steps = 77056  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+
+enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
+
+data_root = f"data/{args.dataset}"
+
+@dataclass
+class GPTConfig:
+    block_size: int = 512
+    vocab_size: int = 64000
+    n_layer: int = 12          
+    n_head: int = 12           
+    n_embd: int = 768  
+
+
+# medium
+    # n_layer: int = 24          
+    # n_head: int = 16           
+    # n_embd: int = 1024 
+# large
+    # n_layer: int = 36          
+    # n_head: int = 20           
+    # n_embd: int = 1280 
+# largeest
+    # n_layer: int = 48          
+    # n_head: int = 25           
+    # n_embd: int = 1600 
 
 class CausalSelfAttention(nn.Module):
 
@@ -76,14 +107,6 @@ class Block(nn.Module):
         x = x + self.attn(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
         return x
-
-@dataclass
-class GPTConfig:
-    block_size: int = 1024 # max sequence length
-    vocab_size: int = 50257 # number of tokens: 50,000 BPE merges + 256 bytes tokens + 1 <|endoftext|> token
-    n_layer: int = 12 # number of layers
-    n_head: int = 12 # number of heads
-    n_embd: int = 768 # embedding dimension
 
 class GPT(nn.Module):
 
@@ -150,8 +173,8 @@ class GPT(nn.Module):
             'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
             'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
         }[model_type]
-        config_args['vocab_size'] = 50257 # always 50257 for GPT model checkpoints
-        config_args['block_size'] = 1024 # always 1024 for GPT model checkpoints
+        config_args['vocab_size'] = 64000 # always 50257 for GPT model checkpoints
+        config_args['block_size'] = 512 # always 1024 for GPT model checkpoints
         # create a from-scratch initialized minGPT model
         config = GPTConfig(**config_args)
         model = GPT(config)
@@ -261,7 +284,7 @@ class DataLoaderLite:
 
 # -----------------------------------------------------------------------------
 # helper function for HellaSwag eval
-# takes tokens, mask, and logits, returns the index of the completion with the lowest loss
+# # takes tokens, mask, and logits, returns the index of the completion with the lowest loss
 def render_example_arabic_mmlu(example):
     """
     Given the ArabicMMLU example as a dictionary, render it as torch tensors
@@ -300,9 +323,9 @@ def render_example_arabic_mmlu(example):
         
         # Calculate total length and truncate if necessary
         total_tokens = ctx_tokens + option_tokens
-        if len(total_tokens) > 1024:
+        if len(total_tokens) > 512:
             # Truncate context to make room for option
-            available_space = 1024 - len(option_tokens)
+            available_space = 512 - len(option_tokens)
             if available_space > 0:
                 truncated_ctx = ctx_tokens[:available_space]
                 tok_rows.append(truncated_ctx + option_tokens)
@@ -324,7 +347,7 @@ def render_example_arabic_mmlu(example):
     max_len = max(len(row) for row in tok_rows)
     
     # Ensure max_len doesn't exceed block size
-    max_len = min(max_len, 1024)
+    max_len = min(max_len, 512)
     
     tokens = torch.zeros((num_options, max_len), dtype=torch.long)
     mask = torch.zeros((num_options, max_len), dtype=torch.long)
@@ -353,7 +376,7 @@ def iterate_examples_arabic_mmlu(split):
     Iterate through ArabicMMLU examples for the given split
     """
     # Assuming the data is available as CSV files
-    csv_path = os.path.join("./", f"ArabicMMLU_{split}.csv")
+    csv_path = os.path.join("./data/evals/", f"ArabicMMLU_{split}.csv")
     df = pd.read_csv(csv_path)
     
     for _, row in df.iterrows():
@@ -427,7 +450,6 @@ torch.manual_seed(1337)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
-enc = tiktoken.get_encoding("gpt2")
 print(f"B: {B}. T: {T}. world size: {ddp_world_size}. ")
 
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
@@ -444,7 +466,7 @@ val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_w
 torch.set_float32_matmul_precision('high')
 
 # create model
-model = GPT(GPTConfig(vocab_size=50304))
+model = GPT(GPTConfig(vocab_size=64000))
 # model = GPT.from_pretrained("gpt2") # or init from OpenAI GPT-2
 model.to(device)
 use_compile = False # torch.compile interferes with HellaSwag eval and Generation. TODO fix
@@ -522,12 +544,12 @@ for step in range(max_steps):
     if (step % 100 == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
-        for i, example in enumerate(iterate_examples("val")):
+        for i, example in enumerate(iterate_examples_arabic_mmlu("val")):
             # only process examples where i % ddp_world_size == ddp_rank
             if i % ddp_world_size != ddp_rank:
                 continue
             # render the example into tokens and labels
-            _, tokens, mask, label = render_example(example)
+            _, tokens, mask, label = render_example_arabic_mmlu(example)
             tokens = tokens.to(device)
             mask = mask.to(device)
             # get the logits
