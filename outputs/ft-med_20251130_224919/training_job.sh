@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=GH-med-gpt
-#SBATCH --output=GH-med-gpt%j.out
-#SBATCH --error=GH-med-gpt%j.err
+#SBATCH --job-name=ft-med
+#SBATCH --output=ft-med%j.out
+#SBATCH --error=ft-med%j.err
 #SBATCH --time=168:00:00
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 ##SBATCH --gpus-per-node=8
-#SBATCH -p superChip -N 1
+#SBATCH -p large-gpu -N 1
 ##SBATCH --gres=gpu:4
 
 # Load the python module first
@@ -16,7 +16,7 @@ module load python3
 cd "$SLURM_SUBMIT_DIR"
 
 # Create output directory with timestamp
-OUTPUT_DIR="outputs/gh-med-gpt_$(date +'%Y%m%d_%H%M%S')"
+OUTPUT_DIR="outputs/ft-med_$(date +'%Y%m%d_%H%M%S')"
 mkdir -p "$OUTPUT_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Job ID: $SLURM_JOB_ID"
@@ -28,7 +28,7 @@ cp "$0" "$OUTPUT_DIR/training_job.sh"
 
 
 # Run training and redirect all outputs to the directory
-source /SEAS/home/g21775526/code/aladdin/venv_torch
+source /SEAS/home/g21775526/code/aladdin/.venv/bin/activate
 module load python3
 
 torchrun --standalone  ft.py \

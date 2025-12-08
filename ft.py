@@ -34,7 +34,7 @@ enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 total_batch_size = 131072 
 B = 8 # micro batch size
 T = 512 # sequence length
-max_steps = 77056  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+max_steps = 363000  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
 data_root = f"data/{args.dataset}"
 eval_frequency = 500
@@ -50,7 +50,7 @@ class FreeTransformerConfig:
     block_size: int = 512
     vocab_size: int = 64000
     n_layer: int = 24          
-    n_head: int = 16           
+    n_head: int = 16          
     n_embd: int = 1024  
     H: int = 8
     attn_pdrop: float = 0.1

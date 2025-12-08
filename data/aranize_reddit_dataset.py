@@ -6,7 +6,7 @@ from transformers import AutoTokenizer
 from tqdm import tqdm
 
 # ------------------------------------------
-local_dir = "data/reddit_tokenized"
+local_dir = "data/arabic-reddit"
 shard_size = int(1e8)  # 100M tokens per shard
 
 # create the cache the local directory if it doesn't exist yet
@@ -17,7 +17,7 @@ print(f"Data will be saved to: {DATA_CACHE_DIR}")
 
 # load the cleaned reddit data
 print("Loading cleaned Reddit data...")
-df = pd.read_csv("cleaned_reddit_data.csv")  # from previous script
+df = pd.read_csv("/gpfs/automountdir/gpfs/homes/SEAS/home/g21775526/data/arctic-shift/cleaned_reddit_data.csv")  # from previous script
 print(f"Loaded {len(df)} posts/comments")
 
 # init the tokenizer

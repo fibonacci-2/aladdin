@@ -12,7 +12,7 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 # ------------------------------------------
-local_dir = "data/fineweb2-msa"
+local_dir = "data/tweeter"
 shard_size = int(1e8) # 100M tokens per shard
 
 # create the cache the local directory if it doesn't exist yet
@@ -24,7 +24,7 @@ print(f"Data will be saved to: {DATA_CACHE_DIR}")
 # download the dataset
 print("Loading dataset...")
 # ds = load_dataset("ClusterlabAi/101_billion_arabic_words_dataset", split="train")
-ds = load_dataset("Omartificial-Intelligence-Space/Fineweb2-MSA", split="train")  # for testing
+ds = load_dataset("pain/Arabic-Tweets", split="train")  # for testing
 # init the tokenizer - using Aranizer instead of tiktoken
 print("Loading tokenizer...")
 tokenizer = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
@@ -86,7 +86,7 @@ with mp.Pool(nprocs) as pool:
     # write any remaining tokens as the last shard
     if token_count != 0:
         split = "val" if shard_index == 0 else "train"
-        filename = os.path.join(DATA_CACHE_DIR, f"arabic_{split}_{shard_index:06d}")
+        filename = os.path.join(DATA_CACHE_DIR, f"tweets_{split}_{shard_index:06d}")
         write_datafile(filename, all_tokens_np[:token_count])
 
 print("Tokenization completed!")
