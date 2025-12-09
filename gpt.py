@@ -18,11 +18,15 @@ parser.add_argument('--dataset', type=str, default='arabic_101B', help='Output d
 args = parser.parse_args()
 
 # -----------------------------------------------------------------------------
-total_batch_size = 245760 
+
+total_batch_size = 131072 
 B = 8 # micro batch size
 T = 512 # sequence length
-max_steps = 77056  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+max_steps = 363000  # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
+
+
+checkpointing_freq = 5000
 enc = AutoTokenizer.from_pretrained("riotu-lab/Aranizer-PBE-64k")
 
 data_root = f"data/{args.dataset}"
@@ -282,125 +286,6 @@ class DataLoaderLite:
             self.current_position = B * T * self.process_rank
         return x, y
 
-# -----------------------------------------------------------------------------
-# helper function for HellaSwag eval
-# # takes tokens, mask, and logits, returns the index of the completion with the lowest loss
-def render_example_arabic_mmlu(example):
-    """
-    Given the ArabicMMLU example as a dictionary, render it as torch tensors
-    with sequence length limited to model's block size
-    """
-    question = example["Question"]
-    context = example.get("Context", "")  # Context may be empty
-    answer_key = example["Answer Key"]
-    
-    # Convert answer key (A-E) to numeric label (0-4)
-    label_map = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
-    label = label_map[answer_key]
-    
-    # Gather all options, filtering out empty ones
-    options = []
-    for i in range(1, 6):
-        option_key = f"Option {i}"
-        if option_key in example and example[option_key] and str(example[option_key]).strip():
-            options.append(str(example[option_key]))
-    
-    # Construct the prompt: question + context (if available)
-    if context:
-        prompt = f"{question} {context}"
-    else:
-        prompt = question
-    
-    # gather up all the tokens
-    ctx_tokens = enc.encode(prompt)
-    
-    tok_rows = []
-    mask_rows = []
-    
-    for option in options:
-        # Note: prepending " " because GPT-2 tokenizer, same as HellaSwag
-        option_tokens = enc.encode(" " + option)
-        
-        # Calculate total length and truncate if necessary
-        total_tokens = ctx_tokens + option_tokens
-        if len(total_tokens) > 512:
-            # Truncate context to make room for option
-            available_space = 512 - len(option_tokens)
-            if available_space > 0:
-                truncated_ctx = ctx_tokens[:available_space]
-                tok_rows.append(truncated_ctx + option_tokens)
-                mask_rows.append([0] * len(truncated_ctx) + [1] * len(option_tokens))
-            else:
-                # Option itself is too long, skip this example
-                print(f"Warning: Option too long, skipping example")
-                continue
-        else:
-            tok_rows.append(ctx_tokens + option_tokens)
-            mask_rows.append([0] * len(ctx_tokens) + [1] * len(option_tokens))
-    
-    # Handle variable number of options (some questions may have fewer than 5 options)
-    num_options = len(options)
-    if num_options == 0 or len(tok_rows) == 0:
-        # Return empty tensors if no valid options
-        return {}, torch.zeros((0, 0), dtype=torch.long), torch.zeros((0, 0), dtype=torch.long), label
-    
-    max_len = max(len(row) for row in tok_rows)
-    
-    # Ensure max_len doesn't exceed block size
-    max_len = min(max_len, 512)
-    
-    tokens = torch.zeros((num_options, max_len), dtype=torch.long)
-    mask = torch.zeros((num_options, max_len), dtype=torch.long)
-    
-    for i, (tok_row, mask_row) in enumerate(zip(tok_rows, mask_rows)):
-        # Truncate each row to max_len if needed
-        truncated_tokens = tok_row[:max_len]
-        truncated_mask = mask_row[:max_len]
-        tokens[i, :len(truncated_tokens)] = torch.tensor(truncated_tokens)
-        mask[i, :len(truncated_mask)] = torch.tensor(truncated_mask)
-    
-    # data dict for debugging/reproducibility
-    data = {
-        "label": label,
-        "ctx_tokens": ctx_tokens,
-        "option_tokens": [enc.encode(" " + opt) for opt in options],
-        "question": question,
-        "context": context,
-        "options": options
-    }
-    
-    return data, tokens, mask, label
-
-def iterate_examples_arabic_mmlu(split):
-    """
-    Iterate through ArabicMMLU examples for the given split
-    """
-    # Assuming the data is available as CSV files
-    csv_path = os.path.join("./data/evals/", f"ArabicMMLU_{split}.csv")
-    df = pd.read_csv(csv_path)
-    
-    for _, row in df.iterrows():
-        example = row.to_dict()
-        yield example
-        
-def get_most_likely_row(tokens, mask, logits):
-    # evaluate the autoregressive loss at all positions
-    shift_logits = (logits[..., :-1, :]).contiguous()
-    shift_tokens = (tokens[..., 1:]).contiguous()
-    flat_shift_logits = shift_logits.view(-1, shift_logits.size(-1))
-    flat_shift_tokens = shift_tokens.view(-1)
-    shift_losses = F.cross_entropy(flat_shift_logits, flat_shift_tokens, reduction='none')
-    shift_losses = shift_losses.view(tokens.size(0), -1)
-    # now get the average loss just for the completion region (where mask == 1), in each row
-    shift_mask = (mask[..., 1:]).contiguous() # we must shift mask, so we start at the last prompt token
-    masked_shift_losses = shift_losses * shift_mask
-    # sum and divide by the number of 1s in the mask
-    sum_loss = masked_shift_losses.sum(dim=1)
-    avg_loss = sum_loss / shift_mask.sum(dim=1)
-    # now we have a loss for each of the 4 completions
-    # the one with the lowest loss should be the most likely
-    pred_norm = avg_loss.argmin().item()
-    return pred_norm
 
 # -----------------------------------------------------------------------------
 # simple launch:
@@ -496,7 +381,7 @@ def get_lr(it):
 optimizer = raw_model.configure_optimizers(weight_decay=0.1, learning_rate=6e-4, device_type=device_type)
 
 # create the log directory we will write checkpoints to and log to
-log_dir = "log"
+log_dir = f"{args.output_dir}/log"
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, f"log.txt")
 with open(log_file, "w") as f: # open for writing to clear the file
@@ -507,7 +392,7 @@ for step in range(max_steps):
     last_step = (step == max_steps - 1)
 
     # once in a while evaluate our validation loss
-    if step % 100 == 0 or last_step:
+    if step % checkpointing_freq == 0 or last_step:
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -526,87 +411,20 @@ for step in range(max_steps):
             print(f"validation loss: {val_loss_accum.item():.4f}")
             with open(log_file, "a") as f:
                 f.write(f"{step} val {val_loss_accum.item():.4f}\n")
-            if step > 0 and (step % 5000 == 0 or last_step):
+
                 # optionally write model checkpoints
-                checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
-                checkpoint = {
-                    'model': raw_model.state_dict(),
-                    'config': raw_model.config,
-                    'step': step,
-                    'val_loss': val_loss_accum.item()
+            print("saving model")
+            checkpoint_path = os.path.join(log_dir, f"model_{step:05d}.pt")
+            checkpoint = {
+                'model': raw_model.state_dict(),
+                'config': raw_model.config,
+                'step': step,
+                'val_loss': val_loss_accum.item()
                 }
-                # you might also want to add optimizer.state_dict() and
-                # rng seeds etc., if you wanted to more exactly resume training
-                torch.save(checkpoint, checkpoint_path)
+            # you might also want to add optimizer.state_dict() and
+            # rng seeds etc., if you wanted to more exactly resume training
+            torch.save(checkpoint, checkpoint_path)
 
-    # once in a while evaluate hellaswag
-    # once in a while evaluate hellaswag
-    if (step % 100 == 0 or last_step) and (not use_compile):
-        num_correct_norm = 0
-        num_total = 0
-        for i, example in enumerate(iterate_examples_arabic_mmlu("val")):
-            # only process examples where i % ddp_world_size == ddp_rank
-            if i % ddp_world_size != ddp_rank:
-                continue
-            # render the example into tokens and labels
-            _, tokens, mask, label = render_example_arabic_mmlu(example)
-            tokens = tokens.to(device)
-            mask = mask.to(device)
-            # get the logits
-            with torch.no_grad():
-                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                    logits, loss = model(tokens)
-                pred_norm = get_most_likely_row(tokens, mask, logits)
-            num_total += 1
-            num_correct_norm += int(pred_norm == label)
-        # reduce the stats across all processes
-        if ddp:
-            num_total = torch.tensor(num_total, dtype=torch.long, device=device)
-            num_correct_norm = torch.tensor(num_correct_norm, dtype=torch.long, device=device)
-            dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
-            dist.all_reduce(num_correct_norm, op=dist.ReduceOp.SUM)
-            num_total = num_total.item()
-            num_correct_norm = num_correct_norm.item()
-        acc_norm = num_correct_norm / num_total
-        if master_process:
-            print(f"HellaSwag accuracy: {num_correct_norm}/{num_total}={acc_norm:.4f}")
-            with open(log_file, "a") as f:
-                f.write(f"{step} hella {acc_norm:.4f}\n")
-
-    if (step % 100 == 0 or last_step) and (not use_compile):
-        num_correct_norm = 0
-        num_total = 0
-        for i, example in enumerate(iterate_examples_arabic_mmlu("val")):
-            # only process examples where i % ddp_world_size == ddp_rank
-            if i % ddp_world_size != ddp_rank:
-                continue
-            # render the example into tokens and labels
-            _, tokens, mask, label = render_example_arabic_mmlu(example)
-            # Skip examples with no valid options
-            if tokens.size(0) == 0:
-                continue
-            tokens = tokens.to(device)
-            mask = mask.to(device)
-            # get the logits
-            with torch.no_grad():
-                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                    logits, loss = model(tokens)
-                pred_norm = get_most_likely_row(tokens, mask, logits)
-            num_total += 1
-            num_correct_norm += int(pred_norm == label)
-        # reduce the stats across all processes
-        if ddp:
-            num_total = torch.tensor(num_total, dtype=torch.long, device=device)
-            num_correct_norm = torch.tensor(num_correct_norm, dtype=torch.long, device=device)
-            dist.all_reduce(num_total, op=dist.ReduceOp.SUM)
-            dist.all_reduce(num_correct_norm, op=dist.ReduceOp.SUM)
-            num_total = num_total.item()
-            num_correct_norm = num_correct_norm.item()
-        acc_norm = num_correct_norm / num_total if num_total > 0 else 0.0
-        if master_process:
-            print(f"ArabicMMLU accuracy: {num_correct_norm}/{num_total}={acc_norm:.4f}")
-            with open(log_file, "a") as f:
-                f.write(f"{step} arabic_mmlu {acc_norm:.4f}\n")
 
     # once in a while generate from the model (except step 0, which is noise)
     if ((step > 0 and step % 100 == 0) or last_step) and (not use_compile):

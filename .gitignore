@@ -3,6 +3,7 @@ arabic_101B/
 venv/
 venv_/
 venv
+.venv/
 venv_
 venv99
 venv99/

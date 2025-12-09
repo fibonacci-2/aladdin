@@ -24,7 +24,7 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 # download the dataset
 ds = load_dataset("MBZUAI/ArabicMMLU", "All")
-
+print(f"loaded dataset of length {len(ds)}")
 # init the tokenizer
 enc = tiktoken.get_encoding("gpt2")
 eot = enc._special_tokens['<|endoftext|>'] # end of text token
@@ -42,7 +42,7 @@ def write_datafile(filename, tokens_np):
     np.save(filename, tokens_np)
 
 # tokenize all documents and write output shards, each of shard_size tokens (last shard has remainder)
-nprocs = max(1, os.cpu_count()//2)
+nprocs = 8
 with mp.Pool(nprocs) as pool:
     shard_index = 0
     # preallocate buffer to hold current shard

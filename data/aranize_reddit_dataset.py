@@ -17,7 +17,7 @@ print(f"Data will be saved to: {DATA_CACHE_DIR}")
 
 # load the cleaned reddit data
 print("Loading cleaned Reddit data...")
-df = pd.read_csv("/gpfs/automountdir/gpfs/homes/SEAS/home/g21775526/data/arctic-shift/cleaned_reddit_data.csv")  # from previous script
+df = pd.read_csv("/workspace/data/cleaned_reddit_data.csv")  # from previous script
 print(f"Loaded {len(df)} posts/comments")
 
 # init the tokenizer

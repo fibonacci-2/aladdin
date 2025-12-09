@@ -1,7 +1,7 @@
 import os
 
 # Path to the folder containing the files
-folder_path = 'fineweb-twitter-reddit/'
+folder_path = 'v01/'
 
 # Loop through all files in the directory
 for filename in os.listdir(folder_path):
